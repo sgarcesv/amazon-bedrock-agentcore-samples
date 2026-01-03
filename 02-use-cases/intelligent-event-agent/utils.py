@@ -2,90 +2,81 @@ import boto3
 import json
 import time
 
+
 def setup_cognito_user_pool(region):
     # Initialize Cognito client
-    cognito_client = boto3.client('cognito-idp', region_name=region)
+    cognito_client = boto3.client("cognito-idp", region_name=region)
     try:
         # Create User Pool
         user_pool_response = cognito_client.create_user_pool(
-            PoolName='MCPServerPool',
-            Policies={
-                'PasswordPolicy': {
-                    'MinimumLength': 8
-                }
-            }
+            PoolName="MCPServerPool", Policies={"PasswordPolicy": {"MinimumLength": 8}}
         )
-        pool_id = user_pool_response['UserPool']['Id']
+        pool_id = user_pool_response["UserPool"]["Id"]
         # Create App Client
         app_client_response = cognito_client.create_user_pool_client(
             UserPoolId=pool_id,
-            ClientName='MCPServerPoolClient',
+            ClientName="MCPServerPoolClient",
             GenerateSecret=False,
-            ExplicitAuthFlows=[
-                'ALLOW_USER_PASSWORD_AUTH',
-                'ALLOW_REFRESH_TOKEN_AUTH'
-            ]
+            ExplicitAuthFlows=["ALLOW_USER_PASSWORD_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"],
         )
-        client_id = app_client_response['UserPoolClient']['ClientId']
+        client_id = app_client_response["UserPoolClient"]["ClientId"]
         # Create User
         cognito_client.admin_create_user(
             UserPoolId=pool_id,
-            Username='testuser',
-            TemporaryPassword='Temp123!',
-            MessageAction='SUPPRESS'
+            Username="testuser",
+            TemporaryPassword="Temp123!",
+            MessageAction="SUPPRESS",
         )
         # Set Permanent Password
         cognito_client.admin_set_user_password(
             UserPoolId=pool_id,
-            Username='testuser',
-            Password='MyPassword123!',
-            Permanent=True
+            Username="testuser",
+            Password="MyPassword123!",
+            Permanent=True,
         )
         # Authenticate User and get Access Token
         auth_response = cognito_client.initiate_auth(
             ClientId=client_id,
-            AuthFlow='USER_PASSWORD_AUTH',
-            AuthParameters={
-                'USERNAME': 'testuser',
-                'PASSWORD': 'MyPassword123!'
-            }
+            AuthFlow="USER_PASSWORD_AUTH",
+            AuthParameters={"USERNAME": "testuser", "PASSWORD": "MyPassword123!"},
         )
-        bearer_token = auth_response['AuthenticationResult']['AccessToken']
+        bearer_token = auth_response["AuthenticationResult"]["AccessToken"]
         # Output the required values
         print(f"Pool id: {pool_id}")
-        print(f"Discovery URL: https://cognito-idp.{region}.amazonaws.com/{pool_id}/.well-known/openid-configuration")
+        print(
+            f"Discovery URL: https://cognito-idp.{region}.amazonaws.com/{pool_id}/.well-known/openid-configuration"
+        )
         print(f"Client ID: {client_id}")
         print(f"Bearer Token: {bearer_token}")
 
         # Return values if needed for further processing
         return {
-            'pool_id': pool_id,
-            'client_id': client_id,
-            'bearer_token': bearer_token,
-            'discovery_url':f"https://cognito-idp.{region}.amazonaws.com/{pool_id}/.well-known/openid-configuration"
+            "pool_id": pool_id,
+            "client_id": client_id,
+            "bearer_token": bearer_token,
+            "discovery_url": f"https://cognito-idp.{region}.amazonaws.com/{pool_id}/.well-known/openid-configuration",
         }
     except Exception as e:
         print(f"Error: {e}")
         return None
 
-def reauthenticate_user(client_id, region):    
+
+def reauthenticate_user(client_id, region):
     # Initialize Cognito client
-    cognito_client = boto3.client('cognito-idp', region_name=region)
+    cognito_client = boto3.client("cognito-idp", region_name=region)
     # Authenticate User and get Access Token
     auth_response = cognito_client.initiate_auth(
         ClientId=client_id,
-        AuthFlow='USER_PASSWORD_AUTH',
-        AuthParameters={
-            'USERNAME': 'testuser',
-            'PASSWORD': 'MyPassword123!'
-        }
+        AuthFlow="USER_PASSWORD_AUTH",
+        AuthParameters={"USERNAME": "testuser", "PASSWORD": "MyPassword123!"},
     )
-    bearer_token = auth_response['AuthenticationResult']['AccessToken']
+    bearer_token = auth_response["AuthenticationResult"]["AccessToken"]
     return bearer_token
 
+
 def create_agentcore_role(agent_name, region):
-    iam_client = boto3.client('iam')
-    agentcore_role_name = f'agentcore-{agent_name}-role'
+    iam_client = boto3.client("iam")
+    agentcore_role_name = f"agentcore-{agent_name}-role"
     account_id = boto3.client("sts").get_caller_identity()["Account"]
     role_policy = {
         "Version": "2012-10-17",
@@ -95,9 +86,9 @@ def create_agentcore_role(agent_name, region):
                 "Effect": "Allow",
                 "Action": [
                     "bedrock:InvokeModel",
-                    "bedrock:InvokeModelWithResponseStream"
+                    "bedrock:InvokeModelWithResponseStream",
                 ],
-                "Resource": "*"
+                "Resource": "*",
             },
             {
                 "Sid": "ECRImageAccess",
@@ -107,68 +98,52 @@ def create_agentcore_role(agent_name, region):
                     "ecr:GetDownloadUrlForLayer",
                     "ecr:GetAuthorizationToken",
                     "ecr:BatchGetImage",
-                    "ecr:GetDownloadUrlForLayer"
+                    "ecr:GetDownloadUrlForLayer",
                 ],
-                "Resource": [
-                    f"arn:aws:ecr:{region}:{account_id}:repository/*"
-                ]
+                "Resource": [f"arn:aws:ecr:{region}:{account_id}:repository/*"],
             },
             {
                 "Effect": "Allow",
-                "Action": [
-                    "logs:DescribeLogStreams",
-                    "logs:CreateLogGroup"
-                ],
+                "Action": ["logs:DescribeLogStreams", "logs:CreateLogGroup"],
                 "Resource": [
                     f"arn:aws:logs:{region}:{account_id}:log-group:/aws/bedrock-agentcore/runtimes/*"
-                ]
+                ],
             },
             {
                 "Effect": "Allow",
-                "Action": [
-                    "logs:DescribeLogGroups"
-                ],
-                "Resource": [
-                    f"arn:aws:logs:{region}:{account_id}:log-group:*"
-                ]
+                "Action": ["logs:DescribeLogGroups"],
+                "Resource": [f"arn:aws:logs:{region}:{account_id}:log-group:*"],
             },
             {
                 "Effect": "Allow",
-                "Action": [
-                    "logs:CreateLogStream",
-                    "logs:PutLogEvents"
-                ],
+                "Action": ["logs:CreateLogStream", "logs:PutLogEvents"],
                 "Resource": [
                     f"arn:aws:logs:{region}:{account_id}:log-group:/aws/bedrock-agentcore/runtimes/*:log-stream:*"
-                ]
+                ],
             },
             {
                 "Sid": "ECRTokenAccess",
                 "Effect": "Allow",
-                "Action": [
-                    "ecr:GetAuthorizationToken"
-                ],
-                "Resource": "*"
+                "Action": ["ecr:GetAuthorizationToken"],
+                "Resource": "*",
             },
             {
-            "Effect": "Allow",
-            "Action": [
-                "xray:PutTraceSegments",
-                "xray:PutTelemetryRecords",
-                "xray:GetSamplingRules",
-                "xray:GetSamplingTargets"
+                "Effect": "Allow",
+                "Action": [
+                    "xray:PutTraceSegments",
+                    "xray:PutTelemetryRecords",
+                    "xray:GetSamplingRules",
+                    "xray:GetSamplingTargets",
                 ],
-             "Resource": [ "*" ]
-             },
-             {
+                "Resource": ["*"],
+            },
+            {
                 "Effect": "Allow",
                 "Resource": "*",
                 "Action": "cloudwatch:PutMetricData",
                 "Condition": {
-                    "StringEquals": {
-                        "cloudwatch:namespace": "bedrock-agentcore"
-                    }
-                }
+                    "StringEquals": {"cloudwatch:namespace": "bedrock-agentcore"}
+                },
             },
             {
                 "Sid": "GetAgentAccessToken",
@@ -176,12 +151,12 @@ def create_agentcore_role(agent_name, region):
                 "Action": [
                     "bedrock-agentcore:GetWorkloadAccessToken",
                     "bedrock-agentcore:GetWorkloadAccessTokenForJWT",
-                    "bedrock-agentcore:GetWorkloadAccessTokenForUserId"
+                    "bedrock-agentcore:GetWorkloadAccessTokenForUserId",
                 ],
                 "Resource": [
-                  f"arn:aws:bedrock-agentcore:{region}:{account_id}:workload-identity-directory/default",
-                  f"arn:aws:bedrock-agentcore:{region}:{account_id}:workload-identity-directory/default/workload-identity/{agent_name}-*"
-                ]
+                    f"arn:aws:bedrock-agentcore:{region}:{account_id}:workload-identity-directory/default",
+                    f"arn:aws:bedrock-agentcore:{region}:{account_id}:workload-identity-directory/default/workload-identity/{agent_name}-*",
+                ],
             },
             {
                 "Sid": "BedrockAgentCoreMemory",
@@ -197,24 +172,19 @@ def create_agentcore_role(agent_name, region):
                     "bedrock-agentcore:ListSessions",
                     "bedrock-agentcore:DeleteEvent",
                     "bedrock-agentcore:DeleteMemoryRecord",
-                    "bedrock-agentcore:RetrieveMemoryRecords"
+                    "bedrock-agentcore:RetrieveMemoryRecords",
                 ],
                 "Resource": [
                     f"arn:aws:bedrock-agentcore:{region}:{account_id}:memory/*"
-                ]
+                ],
             },
             {
                 "Sid": "KnowledgeBaseAccess",
                 "Effect": "Allow",
-                "Action": [
-                    "bedrock:Retrieve",
-                    "bedrock:ListKnowledgeBases"
-                ],
-                "Resource": [
-                    f"arn:aws:bedrock:{region}:{account_id}:knowledge-base/*"
-                ]
-            }
-        ]
+                "Action": ["bedrock:Retrieve", "bedrock:ListKnowledgeBases"],
+                "Resource": [f"arn:aws:bedrock:{region}:{account_id}:knowledge-base/*"],
+            },
+        ],
     }
     assume_role_policy_document = {
         "Version": "2012-10-17",
@@ -222,31 +192,25 @@ def create_agentcore_role(agent_name, region):
             {
                 "Sid": "AssumeRolePolicy",
                 "Effect": "Allow",
-                "Principal": {
-                    "Service": "bedrock-agentcore.amazonaws.com"
-                },
+                "Principal": {"Service": "bedrock-agentcore.amazonaws.com"},
                 "Action": "sts:AssumeRole",
                 "Condition": {
-                    "StringEquals": {
-                        "aws:SourceAccount": f"{account_id}"
-                    },
+                    "StringEquals": {"aws:SourceAccount": f"{account_id}"},
                     "ArnLike": {
                         "aws:SourceArn": f"arn:aws:bedrock-agentcore:{region}:{account_id}:*"
-                    }
-                }
+                    },
+                },
             }
-        ]
+        ],
     }
 
-    assume_role_policy_document_json = json.dumps(
-        assume_role_policy_document
-    )
+    assume_role_policy_document_json = json.dumps(assume_role_policy_document)
     role_policy_document = json.dumps(role_policy)
     # Create IAM Role for the Lambda function
     try:
         agentcore_iam_role = iam_client.create_role(
             RoleName=agentcore_role_name,
-            AssumeRolePolicyDocument=assume_role_policy_document_json
+            AssumeRolePolicyDocument=assume_role_policy_document_json,
         )
 
         # Pause to make sure role is created
@@ -254,23 +218,19 @@ def create_agentcore_role(agent_name, region):
     except iam_client.exceptions.EntityAlreadyExistsException:
         print("Role already exists -- deleting and creating it again")
         policies = iam_client.list_role_policies(
-            RoleName=agentcore_role_name,
-            MaxItems=100
+            RoleName=agentcore_role_name, MaxItems=100
         )
         print("policies:", policies)
-        for policy_name in policies['PolicyNames']:
+        for policy_name in policies["PolicyNames"]:
             iam_client.delete_role_policy(
-                RoleName=agentcore_role_name,
-                PolicyName=policy_name
+                RoleName=agentcore_role_name, PolicyName=policy_name
             )
         print(f"deleting {agentcore_role_name}")
-        iam_client.delete_role(
-            RoleName=agentcore_role_name
-        )
+        iam_client.delete_role(RoleName=agentcore_role_name)
         print(f"recreating {agentcore_role_name}")
         agentcore_iam_role = iam_client.create_role(
             RoleName=agentcore_role_name,
-            AssumeRolePolicyDocument=assume_role_policy_document_json
+            AssumeRolePolicyDocument=assume_role_policy_document_json,
         )
 
     # Attach the AWSLambdaBasicExecutionRole policy
@@ -279,28 +239,29 @@ def create_agentcore_role(agent_name, region):
         iam_client.put_role_policy(
             PolicyDocument=role_policy_document,
             PolicyName="AgentCorePolicy",
-            RoleName=agentcore_role_name
+            RoleName=agentcore_role_name,
         )
     except Exception as e:
         print(e)
 
     return agentcore_iam_role
 
+
 def empty_and_delete_bucket(bucket_name):
     """
     Empty and delete an S3 bucket, including all objects and versions
     """
-    s3 = boto3.resource('s3')
+    s3 = boto3.resource("s3")
     bucket = s3.Bucket(bucket_name)
-    
+
     # Delete all objects
     bucket.objects.all().delete()
-    
+
     # Delete all object versions if versioning is enabled
-    bucket_versioning = boto3.client('s3').get_bucket_versioning(Bucket=bucket_name)
-    if 'Status' in bucket_versioning and bucket_versioning['Status'] == 'Enabled':
+    bucket_versioning = boto3.client("s3").get_bucket_versioning(Bucket=bucket_name)
+    if "Status" in bucket_versioning and bucket_versioning["Status"] == "Enabled":
         bucket.object_versions.all().delete()
-    
+
     # Now delete the empty bucket
-    boto3.client('s3').delete_bucket(Bucket=bucket_name)
+    boto3.client("s3").delete_bucket(Bucket=bucket_name)
     print(f"Bucket {bucket_name} has been emptied and deleted.")
