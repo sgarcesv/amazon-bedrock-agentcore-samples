@@ -1,7 +1,6 @@
 import boto3
 import json
 import time
-from boto3.session import Session
 
 def setup_cognito_user_pool(region):
     # Initialize Cognito client
